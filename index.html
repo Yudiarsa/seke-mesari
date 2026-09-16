@@ -305,7 +305,7 @@
         <option value="keluar">Kas Keluar (-)</option>
       </select>
       <label>Jumlah (Rp)</label>
-      <input type="number" id="sesuaikanKasJumlah" min="1" step="1000" required>
+      <input type="number" id="sesuaikanKasJumlah" min="1000" step="1000" required>
       <label>Keterangan</label>
       <input type="text" id="sesuaikanKasKeterangan" placeholder="Contoh: Setoran kas awal SEKE MESARI" required>
       <div class="form-note">Tercatat di Buku Kas &amp; Audit Log sebagai transaksi "Penyesuaian Kas" — bukan sekadar edit angka diam-diam.</div>
@@ -323,7 +323,7 @@
     </div>
     <form id="adminPinjamanForm">
       <label>Jumlah Pinjaman (Rp)</label>
-      <input type="number" id="adminPinjamanJumlah" min="1" step="1000" required>
+      <input type="number" id="adminPinjamanJumlah" min="1000" step="1000" required>
       <label>Tanggal Pencairan</label>
       <input type="date" id="adminPinjamanTanggal" required>
       <div class="form-note">Untuk mencatat pinjaman yang sudah berjalan sebelum pakai aplikasi ini. Jatuh tempo dihitung otomatis 30 hari dari tanggal pencairan.</div>
@@ -343,7 +343,7 @@
       <label>Tanggal</label>
       <input type="date" id="adminAngsuranTanggal" required>
       <label>Nominal (Rp)</label>
-      <input type="number" id="adminAngsuranNominal" min="1" step="1000" required>
+      <input type="number" id="adminAngsuranNominal" min="1000" step="1000" required>
       <div class="form-note">Untuk angsuran yang dibayar tunai langsung ke admin, atau riwayat sebelum pakai aplikasi ini — tanpa perlu anggota upload bukti.</div>
       <button type="submit" class="btn-primary">Simpan</button>
     </form>
