@@ -16,6 +16,7 @@ let currentUserId = null;
 
 let viewAsAdmin = false; // demo-only "lihat sebagai" toggle, follows session role by default
 let lainnyaView = "menu";
+let adminToolTargetAnggotaId = null; // anggota sedang dipilih untuk Input Pinjaman/Catat Angsuran Manual
 
 /* ===== Helpers =====
    (formatRupiah, todayIso, daysFromNow, nowIso, BUNGA_PERSEN,
@@ -537,8 +538,8 @@ function renderHistori() {
   const scoped = isAdmin() ? state.transaksi : state.transaksi.filter(t => t.anggotaId === u.id);
   const filtered = histFilterJenis === "semua" ? scoped : scoped.filter(t => t.jenis === histFilterJenis);
   const sorted = [...filtered].sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal));
-  const jenisLabel = { setoran: "Setoran", pinjaman: "Pinjaman", angsuran: "Angsuran" };
-  const jenisIcon = { setoran: "➕", pinjaman: "💰", angsuran: "📄" };
+  const jenisLabel = { setoran: "Setoran", pinjaman: "Pinjaman", angsuran: "Angsuran", penyesuaian: "Penyesuaian Kas" };
+  const jenisIcon = { setoran: "➕", pinjaman: "💰", angsuran: "📄", penyesuaian: "⚖️" };
   const listEl = document.getElementById("histList");
   if (sorted.length === 0) {
     listEl.innerHTML = `<div class="activity-empty">Belum ada transaksi.</div>`;
@@ -551,7 +552,7 @@ function renderHistori() {
       <div class="activity-item">
         <div class="activity-icon ${t.arah === "masuk" ? "in" : "out"}">${jenisIcon[t.jenis]}</div>
         <div class="activity-main">
-          <div class="activity-title">${jenisLabel[t.jenis]}${isAdmin() ? " — " + a.nama : ""}</div>
+          <div class="activity-title">${jenisLabel[t.jenis]}${isAdmin() && a ? " — " + a.nama : ""}</div>
           <div class="activity-sub">${formatDate(t.tanggal)}${t.keterangan ? " · " + escapeHtml(t.keterangan) : ""}</div>
         </div>
         <div class="activity-amount ${t.arah === "masuk" ? "in" : "out"}">${sign}${formatRupiah(t.jumlah)}</div>
@@ -641,6 +642,9 @@ function openMemberDetail(id) {
 
     ${isAdmin() ? `
     <div class="md-actions">
+      ${a.pinjaman
+        ? `<button class="btn-outline" id="mdCatatAngsuranBtn">Catat Angsuran Manual</button>`
+        : `<button class="btn-outline" id="mdInputPinjamanBtn">Input Pinjaman Manual</button>`}
       <button class="btn-outline" id="mdToggleStatusBtn">${a.status === "aktif" ? "Nonaktifkan" : "Aktifkan"} Anggota</button>
     </div>` : ""}
   `;
@@ -660,6 +664,24 @@ function openMemberDetail(id) {
         showToast("Gagal: " + err.message);
       }
     });
+
+    if (a.pinjaman) {
+      document.getElementById("mdCatatAngsuranBtn").addEventListener("click", () => {
+        adminToolTargetAnggotaId = a.id;
+        document.getElementById("adminAngsuranModalTitle").textContent = `Catat Angsuran Manual — ${a.nama}`;
+        document.getElementById("adminAngsuranForm").reset();
+        document.getElementById("adminAngsuranTanggal").value = todayIso();
+        document.getElementById("adminAngsuranModalOverlay").hidden = false;
+      });
+    } else {
+      document.getElementById("mdInputPinjamanBtn").addEventListener("click", () => {
+        adminToolTargetAnggotaId = a.id;
+        document.getElementById("adminPinjamanModalTitle").textContent = `Input Pinjaman — ${a.nama}`;
+        document.getElementById("adminPinjamanForm").reset();
+        document.getElementById("adminPinjamanTanggal").value = todayIso();
+        document.getElementById("adminPinjamanModalOverlay").hidden = false;
+      });
+    }
   }
 }
 
@@ -670,6 +692,7 @@ const LAINNYA_ITEMS = [
   { key: "timeline", icon: "🗓️", label: "Timeline Periode", adminOnly: false },
   { key: "auditlog", icon: "🧾", label: "Audit Log", adminOnly: false },
   { key: "unduhLaporan", icon: "⬇️", label: "Unduh Laporan Keuangan (PDF)", adminOnly: false },
+  { key: "sesuaikanKas", icon: "🧮", label: "Sesuaikan Kas", adminOnly: true },
   { key: "peran", icon: "🔁", label: "Lihat Sebagai (Demo)", adminOnly: false },
   { key: "tentang", icon: "ℹ️", label: "Tentang & Keterbatasan", adminOnly: false },
   { key: "keluar", icon: "🚪", label: "Keluar", adminOnly: false, danger: true }
@@ -681,7 +704,7 @@ function renderLainnya() {
   if (lainnyaView === "menu") {
     menuEl.hidden = false;
     subEl.hidden = true;
-    menuEl.innerHTML = LAINNYA_ITEMS.map(item => `
+    menuEl.innerHTML = LAINNYA_ITEMS.filter(item => !item.adminOnly || isAdmin()).map(item => `
       <div class="menu-item ${item.danger ? "danger" : ""}" data-key="${item.key}">
         <div class="menu-item-icon">${item.icon}</div>
         <div class="menu-item-label">${item.label}</div>
@@ -691,6 +714,7 @@ function renderLainnya() {
       el.addEventListener("click", () => {
         if (el.dataset.key === "keluar") { logout(); return; }
         if (el.dataset.key === "unduhLaporan") { generateLaporanKeuanganPDF(); return; }
+        if (el.dataset.key === "sesuaikanKas") { openSesuaikanKasModal(); return; }
         lainnyaView = el.dataset.key;
         renderLainnya();
       });
@@ -833,13 +857,13 @@ async function generateLaporanKeuanganPDF() {
   /* 4. Buku Kas — riwayat transaksi lengkap dengan saldo berjalan */
   ensureSpace(30);
   sectionTitle("4. Buku Kas — Riwayat Transaksi Lengkap");
-  const jenisLabel = { setoran: "Setoran", pinjaman: "Pencairan Pinjaman", angsuran: "Angsuran" };
+  const jenisLabel = { setoran: "Setoran", pinjaman: "Pencairan Pinjaman", angsuran: "Angsuran", penyesuaian: "Penyesuaian Kas" };
   const aktif = state.transaksi.filter(t => !t.dibatalkan).sort((a, b) => new Date(a.tanggal) - new Date(b.tanggal));
   let saldo = state.kasTerkumpulAwal;
   const bukuKasRows = aktif.map((t, i) => {
     saldo += t.arah === "masuk" ? t.jumlah : -t.jumlah;
     return [
-      i + 1, formatDate(t.tanggal), getAnggota(t.anggotaId)?.nama || "-", jenisLabel[t.jenis] || t.jenis,
+      i + 1, formatDate(t.tanggal), getAnggota(t.anggotaId)?.nama || "Koperasi", jenisLabel[t.jenis] || t.jenis,
       t.arah === "masuk" ? formatRupiah(t.jumlah) : "-",
       t.arah === "keluar" ? formatRupiah(t.jumlah) : "-",
       formatRupiah(saldo)
@@ -895,7 +919,9 @@ function renderBukuKas(content) {
         <tbody>
           ${rows.map(t => {
             const a = getAnggota(t.anggotaId);
-            const ket = `${jenisLabel[t.jenis]} — ${a ? a.nama : "-"}`;
+            const ket = t.jenis === "penyesuaian"
+              ? (t.keterangan || "Penyesuaian Kas")
+              : `${jenisLabel[t.jenis]} — ${a ? a.nama : "-"}`;
             const cancelled = t.dibatalkan;
             return `<tr class="${cancelled ? "dibatalkan" : ""}" data-tx="${t.id}">
               <td>${formatDate(t.tanggal)}</td>
@@ -1134,6 +1160,88 @@ function initStatDrilldown() {
   });
 }
 
+/* ===== Admin tools: Sesuaikan Kas, Input Pinjaman Manual, Catat Angsuran Manual =====
+   Dipakai admin untuk onboarding data riil (kas awal, pinjaman yang
+   sudah berjalan) tanpa perlu SQL manual. */
+function openSesuaikanKasModal() {
+  if (!isAdmin()) { showToast("Hanya admin yang bisa mengakses ini."); return; }
+  document.getElementById("sesuaikanKasForm").reset();
+  document.getElementById("sesuaikanKasModalOverlay").hidden = false;
+}
+
+function initAdminToolModals() {
+  document.getElementById("sesuaikanKasModalCloseBtn").addEventListener("click", () => {
+    document.getElementById("sesuaikanKasModalOverlay").hidden = true;
+  });
+  document.getElementById("sesuaikanKasModalOverlay").addEventListener("click", (e) => {
+    if (e.target.id === "sesuaikanKasModalOverlay") document.getElementById("sesuaikanKasModalOverlay").hidden = true;
+  });
+  document.getElementById("sesuaikanKasForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const arah = document.getElementById("sesuaikanKasArah").value;
+    const jumlah = Number(document.getElementById("sesuaikanKasJumlah").value);
+    const keterangan = document.getElementById("sesuaikanKasKeterangan").value.trim();
+    const actor = currentUser();
+    try {
+      await dbSesuaikanKas(jumlah, arah, keterangan, actor ? actor.nama : "-");
+      await refreshState();
+      document.getElementById("sesuaikanKasModalOverlay").hidden = true;
+      showToast("Kas berhasil disesuaikan.");
+      renderHome();
+    } catch (err) {
+      showToast("Gagal: " + err.message);
+    }
+  });
+
+  document.getElementById("adminPinjamanModalCloseBtn").addEventListener("click", () => {
+    document.getElementById("adminPinjamanModalOverlay").hidden = true;
+  });
+  document.getElementById("adminPinjamanModalOverlay").addEventListener("click", (e) => {
+    if (e.target.id === "adminPinjamanModalOverlay") document.getElementById("adminPinjamanModalOverlay").hidden = true;
+  });
+  document.getElementById("adminPinjamanForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const jumlah = Number(document.getElementById("adminPinjamanJumlah").value);
+    const tanggal = document.getElementById("adminPinjamanTanggal").value;
+    const target = getAnggota(adminToolTargetAnggotaId);
+    const actor = currentUser();
+    try {
+      await dbAdminBuatPinjaman(target.id, target.nama, jumlah, tanggal, actor ? actor.nama : "-");
+      await refreshState();
+      document.getElementById("adminPinjamanModalOverlay").hidden = true;
+      document.getElementById("memberModalOverlay").hidden = true;
+      showToast("Pinjaman berhasil dicatat.");
+      renderMemberList(document.getElementById("memberSearch").value);
+    } catch (err) {
+      showToast("Gagal: " + err.message);
+    }
+  });
+
+  document.getElementById("adminAngsuranModalCloseBtn").addEventListener("click", () => {
+    document.getElementById("adminAngsuranModalOverlay").hidden = true;
+  });
+  document.getElementById("adminAngsuranModalOverlay").addEventListener("click", (e) => {
+    if (e.target.id === "adminAngsuranModalOverlay") document.getElementById("adminAngsuranModalOverlay").hidden = true;
+  });
+  document.getElementById("adminAngsuranForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const tanggal = document.getElementById("adminAngsuranTanggal").value;
+    const nominal = Number(document.getElementById("adminAngsuranNominal").value);
+    const target = getAnggota(adminToolTargetAnggotaId);
+    const actor = currentUser();
+    try {
+      await dbAdminCatatAngsuran(target, tanggal, nominal, actor ? actor.nama : "-");
+      await refreshState();
+      document.getElementById("adminAngsuranModalOverlay").hidden = true;
+      document.getElementById("memberModalOverlay").hidden = true;
+      showToast("Angsuran berhasil dicatat.");
+      renderMemberList(document.getElementById("memberSearch").value);
+    } catch (err) {
+      showToast("Gagal: " + err.message);
+    }
+  });
+}
+
 /* ===== Add Pengumuman =====
    Pakai modal sendiri, bukan window.prompt() — di dalam iframe (artifact)
    maupun sebagian in-app browser mobile, prompt()/alert()/confirm() bisa
@@ -1204,6 +1312,7 @@ function init() {
   initBuktiModal();
   initPengumumanModal();
   initStatDrilldown();
+  initAdminToolModals();
 
   document.querySelectorAll(".nav-item").forEach(btn => btn.addEventListener("click", () => switchTab(btn.dataset.tab)));
 

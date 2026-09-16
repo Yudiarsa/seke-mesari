@@ -163,6 +163,7 @@
           <button class="filter-chip" data-jenis="setoran">Setoran</button>
           <button class="filter-chip" data-jenis="pinjaman">Pinjaman</button>
           <button class="filter-chip" data-jenis="angsuran">Angsuran</button>
+          <button class="filter-chip" data-jenis="penyesuaian">Penyesuaian</button>
         </div>
         <div id="histList" class="activity-list"></div>
       </div>
@@ -285,6 +286,65 @@
     <form id="pengumumanForm">
       <label>Isi Pengumuman</label>
       <textarea id="pengumumanTeks" rows="4" placeholder="Contoh: Pertemuan bulanan 10 Oktober di Balai Banjar" required></textarea>
+      <button type="submit" class="btn-primary">Simpan</button>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Sesuaikan Kas (admin) -->
+<div class="modal-overlay" id="sesuaikanKasModalOverlay" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Sesuaikan Kas</h3>
+      <button class="icon-btn" id="sesuaikanKasModalCloseBtn">✕</button>
+    </div>
+    <form id="sesuaikanKasForm">
+      <label>Arah</label>
+      <select id="sesuaikanKasArah" required>
+        <option value="masuk">Kas Masuk (+)</option>
+        <option value="keluar">Kas Keluar (-)</option>
+      </select>
+      <label>Jumlah (Rp)</label>
+      <input type="number" id="sesuaikanKasJumlah" min="1" step="1000" required>
+      <label>Keterangan</label>
+      <input type="text" id="sesuaikanKasKeterangan" placeholder="Contoh: Setoran kas awal SEKE MESARI" required>
+      <div class="form-note">Tercatat di Buku Kas &amp; Audit Log sebagai transaksi "Penyesuaian Kas" — bukan sekadar edit angka diam-diam.</div>
+      <button type="submit" class="btn-primary">Simpan</button>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Input Pinjaman Manual (admin, dari member detail) -->
+<div class="modal-overlay" id="adminPinjamanModalOverlay" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="adminPinjamanModalTitle">Input Pinjaman</h3>
+      <button class="icon-btn" id="adminPinjamanModalCloseBtn">✕</button>
+    </div>
+    <form id="adminPinjamanForm">
+      <label>Jumlah Pinjaman (Rp)</label>
+      <input type="number" id="adminPinjamanJumlah" min="1" step="1000" required>
+      <label>Tanggal Pencairan</label>
+      <input type="date" id="adminPinjamanTanggal" required>
+      <div class="form-note">Untuk mencatat pinjaman yang sudah berjalan sebelum pakai aplikasi ini. Jatuh tempo dihitung otomatis 30 hari dari tanggal pencairan.</div>
+      <button type="submit" class="btn-primary">Simpan</button>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Catat Angsuran Manual (admin, dari member detail) -->
+<div class="modal-overlay" id="adminAngsuranModalOverlay" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="adminAngsuranModalTitle">Catat Angsuran Manual</h3>
+      <button class="icon-btn" id="adminAngsuranModalCloseBtn">✕</button>
+    </div>
+    <form id="adminAngsuranForm">
+      <label>Tanggal</label>
+      <input type="date" id="adminAngsuranTanggal" required>
+      <label>Nominal (Rp)</label>
+      <input type="number" id="adminAngsuranNominal" min="1" step="1000" required>
+      <div class="form-note">Untuk angsuran yang dibayar tunai langsung ke admin, atau riwayat sebelum pakai aplikasi ini — tanpa perlu anggota upload bukti.</div>
       <button type="submit" class="btn-primary">Simpan</button>
     </form>
   </div>

@@ -59,17 +59,23 @@ create unique index if not exists satu_pinjaman_aktif_per_anggota
 -- ---------------------------------------------------------------------------
 -- 3. TRANSAKSI (Buku Kas — audit trail: hanya bisa dibatalkan, tidak dihapus)
 -- ---------------------------------------------------------------------------
+-- anggota_id boleh null: dipakai untuk "penyesuaian" tingkat koperasi
+-- (mis. setoran kas awal) yang bukan milik anggota tertentu.
 create table if not exists public.transaksi (
   id uuid primary key default gen_random_uuid(),
   tanggal date not null,
-  anggota_id uuid not null references public.anggota(id),
-  jenis text not null check (jenis in ('setoran', 'pinjaman', 'angsuran')),
+  anggota_id uuid references public.anggota(id),
+  jenis text not null check (jenis in ('setoran', 'pinjaman', 'angsuran', 'penyesuaian')),
   jumlah bigint not null,
   arah text not null check (arah in ('masuk', 'keluar')),
   keterangan text,
   dibatalkan boolean not null default false,
   created_at timestamptz not null default now()
 );
+-- Migrasi untuk database yang sudah ada dari sebelum "penyesuaian" ditambahkan:
+alter table public.transaksi alter column anggota_id drop not null;
+alter table public.transaksi drop constraint if exists transaksi_jenis_check;
+alter table public.transaksi add constraint transaksi_jenis_check check (jenis in ('setoran', 'pinjaman', 'angsuran', 'penyesuaian'));
 
 -- ---------------------------------------------------------------------------
 -- 4. PENGAJUAN PINJAMAN

@@ -245,3 +245,58 @@ async function dbSetAnggotaStatus(anggotaId, anggotaNama, status, actorNama) {
   if (error) throw new Error(error.message);
   await dbLogAudit(actorNama, `${status === "nonaktif" ? "Menonaktifkan" : "Mengaktifkan"} anggota ${anggotaNama}`);
 }
+
+/* ===== Admin tools: penyesuaian kas & input pinjaman/angsuran manual =====
+   Dipakai untuk onboarding data riil (kas awal, pinjaman yang sudah
+   berjalan sebelum pakai aplikasi ini) tanpa admin perlu SQL manual. */
+async function dbSesuaikanKas(jumlah, arah, keterangan, actorNama) {
+  const { error } = await db.from("transaksi").insert({
+    tanggal: todayIso(), anggota_id: null, jenis: "penyesuaian", jumlah, arah, keterangan
+  });
+  if (error) throw new Error(error.message);
+  await dbLogAudit(actorNama, `Penyesuaian kas: ${arah === "masuk" ? "+" : "-"}${formatRupiah(jumlah)} — ${keterangan}`);
+}
+
+async function dbAdminBuatPinjaman(anggotaId, anggotaNama, jumlah, tanggalPencairan, actorNama) {
+  const jatuhTempo = new Date(tanggalPencairan);
+  jatuhTempo.setDate(jatuhTempo.getDate() + 30);
+  const { error: pinjErr } = await db.from("pinjaman").insert({
+    anggota_id: anggotaId, jumlah, total_cicilan: TOTAL_CICILAN, cicilan_terbayar: 0,
+    bunga_persen_bulan: BUNGA_PERSEN, jatuh_tempo: jatuhTempo.toISOString().slice(0, 10), status: "aktif"
+  });
+  if (pinjErr) {
+    if (pinjErr.message.includes("duplicate key")) throw new Error("Anggota ini sudah punya pinjaman aktif.");
+    throw new Error(pinjErr.message);
+  }
+  const { error: anggotaErr } = await db.from("anggota").update({ tunggakan: 0 }).eq("id", anggotaId);
+  if (anggotaErr) throw new Error(anggotaErr.message);
+  const { error: txErr } = await db.from("transaksi").insert({
+    tanggal: tanggalPencairan, anggota_id: anggotaId, jenis: "pinjaman",
+    jumlah, arah: "keluar", keterangan: "Pencairan pinjaman (input manual admin)"
+  });
+  if (txErr) throw new Error(txErr.message);
+  await dbLogAudit(actorNama, `Input pinjaman manual untuk ${anggotaNama} sebesar ${formatRupiah(jumlah)}`);
+}
+
+async function dbAdminCatatAngsuran(anggota, tanggal, nominal, actorNama) {
+  if (!anggota.pinjaman) throw new Error("Anggota ini tidak punya pinjaman aktif.");
+  const { error: txErr } = await db.from("transaksi").insert({
+    tanggal, anggota_id: anggota.id, jenis: "angsuran", jumlah: nominal, arah: "masuk",
+    keterangan: "Angsuran (input manual admin)"
+  });
+  if (txErr) throw new Error(txErr.message);
+
+  const cicilanBaru = Math.min(anggota.pinjaman.totalCicilan, anggota.pinjaman.cicilanTerbayar + 1);
+  const lunas = cicilanBaru >= anggota.pinjaman.totalCicilan;
+  const { error: pinjErr } = await db.from("pinjaman")
+    .update({ cicilan_terbayar: cicilanBaru, status: lunas ? "lunas" : "aktif" })
+    .eq("id", anggota.pinjaman.id);
+  if (pinjErr) throw new Error(pinjErr.message);
+
+  const { error: anggotaErr } = await db.from("anggota")
+    .update({ tunggakan: Math.max(0, anggota.tunggakan - 1) })
+    .eq("id", anggota.id);
+  if (anggotaErr) throw new Error(anggotaErr.message);
+
+  await dbLogAudit(actorNama, `Mencatat angsuran manual ${anggota.nama} sebesar ${formatRupiah(nominal)}`);
+}

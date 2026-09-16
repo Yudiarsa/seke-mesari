@@ -604,13 +604,15 @@ tr.dibatalkan td { text-decoration: line-through; opacity: 0.5; }
   margin-bottom: 16px;
 }
 .modal-header h3 { margin: 0; font-size: 16px; }
-#pinjamanForm label, #buktiForm label, #anggotaForm label, #pengumumanForm label {
+#pinjamanForm label, #buktiForm label, #pengumumanForm label,
+#sesuaikanKasForm label, #adminPinjamanForm label, #adminAngsuranForm label {
   display: block;
   font-size: 12px;
   color: var(--text-muted);
   margin: 12px 0 6px;
 }
-#pinjamanForm input, #buktiForm input, #anggotaForm input, #pengumumanForm textarea {
+#pinjamanForm input, #buktiForm input, #pengumumanForm textarea,
+#sesuaikanKasForm input, #sesuaikanKasForm select, #adminPinjamanForm input, #adminAngsuranForm input {
   width: 100%;
   padding: 10px 12px;
   border-radius: 10px;
