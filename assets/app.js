@@ -943,18 +943,23 @@ function renderBukuKas(content) {
               : `${jenisLabel[t.jenis]} — ${a ? a.nama : "-"}`;
             const cancelled = t.dibatalkan;
             const bisaBatal = isAdmin() && !cancelled && t.jenis !== "pinjaman";
+            const bisaPulihkan = isAdmin() && cancelled && t.jenis !== "pinjaman";
             return `<tr class="${cancelled ? "dibatalkan" : ""}" data-tx="${t.id}">
               <td>${formatDate(t.tanggal)}${cancelled ? ' <span class="status-pill ditolak">Dibatalkan</span>' : ""}</td>
               <td>${escapeHtml(ket)}</td>
               <td>${t.arah === "masuk" ? formatRupiah(t.jumlah) : "-"}</td>
               <td>${t.arah === "keluar" ? formatRupiah(t.jumlah) : "-"}</td>
-              ${isAdmin() ? `<td>${bisaBatal ? `<button class="btn-mini reject" data-batalkan-tx="${t.id}">Batalkan</button>` : ""}</td>` : ""}
+              ${isAdmin() ? `<td>${
+                bisaBatal ? `<button class="btn-mini reject" data-batalkan-tx="${t.id}">Batalkan</button>`
+                : bisaPulihkan ? `<button class="btn-mini approve" data-pulihkan-tx="${t.id}">Pulihkan</button>`
+                : ""
+              }</td>` : ""}
             </tr>`;
           }).join("")}
         </tbody>
       </table>
     </div>
-    <div class="form-note" style="margin-top:10px">Transaksi tidak pernah dihapus — hanya dapat dibatalkan (audit trail tetap tersimpan).</div>
+    <div class="form-note" style="margin-top:10px">Transaksi tidak pernah dihapus — hanya dapat dibatalkan (audit trail tetap tersimpan). Salah membatalkan? Tap "Pulihkan" untuk mengembalikan.</div>
   `;
   if (isAdmin()) {
     content.querySelectorAll("[data-batalkan-tx]").forEach(btn => {
@@ -967,6 +972,21 @@ function renderBukuKas(content) {
           await refreshState();
           renderBukuKas(content);
           showToast("Transaksi dibatalkan.");
+        } catch (err) {
+          showToast("Gagal: " + err.message);
+        }
+      });
+    });
+    content.querySelectorAll("[data-pulihkan-tx]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const t = state.transaksi.find(x => x.id === btn.dataset.pulihkanTx);
+        if (!t) return;
+        const actor = currentUser();
+        try {
+          await dbPulihkanTransaksi(t, actor ? actor.nama : "-");
+          await refreshState();
+          renderBukuKas(content);
+          showToast("Transaksi dipulihkan.");
         } catch (err) {
           showToast("Gagal: " + err.message);
         }

@@ -342,6 +342,39 @@ async function dbBatalkanTransaksi(transaksi, actorNama) {
   await dbLogAudit(actorNama, `Membatalkan transaksi ${transaksi.jenis} sebesar ${formatRupiah(transaksi.jumlah)}`);
 }
 
+/* Kebalikan dari dbBatalkanTransaksi — untuk kalau admin salah membatalkan. */
+async function dbPulihkanTransaksi(transaksi, actorNama) {
+  const { error: txErr } = await db.from("transaksi").update({ dibatalkan: false }).eq("id", transaksi.id);
+  if (txErr) throw new Error(txErr.message);
+
+  if (transaksi.jenis === "angsuran" && transaksi.anggotaId) {
+    const { data: pinjamanRow } = await db.from("pinjaman")
+      .select("*").eq("anggota_id", transaksi.anggotaId)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (pinjamanRow) {
+      const cicilanBaru = Math.min(pinjamanRow.total_cicilan, pinjamanRow.cicilan_terbayar + 1);
+      const lunas = cicilanBaru >= pinjamanRow.total_cicilan;
+      const { error } = await db.from("pinjaman")
+        .update({ cicilan_terbayar: cicilanBaru, status: lunas ? "lunas" : "aktif" })
+        .eq("id", pinjamanRow.id);
+      if (error) throw new Error(error.message);
+      const { data: anggotaRow } = await db.from("anggota").select("tunggakan").eq("id", transaksi.anggotaId).single();
+      const { error: err2 } = await db.from("anggota")
+        .update({ tunggakan: Math.max(0, (anggotaRow?.tunggakan || 0) - 1) })
+        .eq("id", transaksi.anggotaId);
+      if (err2) throw new Error(err2.message);
+    }
+  } else if (transaksi.jenis === "setoran" && transaksi.anggotaId) {
+    const { data: anggotaRow } = await db.from("anggota").select("total_simpanan").eq("id", transaksi.anggotaId).single();
+    const { error } = await db.from("anggota")
+      .update({ total_simpanan: (anggotaRow?.total_simpanan || 0) + transaksi.jumlah })
+      .eq("id", transaksi.anggotaId);
+    if (error) throw new Error(error.message);
+  }
+
+  await dbLogAudit(actorNama, `Memulihkan transaksi ${transaksi.jenis} sebesar ${formatRupiah(transaksi.jumlah)}`);
+}
+
 async function dbHapusPinjaman(anggota, actorNama) {
   if (!anggota.pinjaman) throw new Error("Anggota ini tidak punya pinjaman aktif.");
   if (anggota.pinjaman.cicilanTerbayar > 0) {
