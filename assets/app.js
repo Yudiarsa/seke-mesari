@@ -58,7 +58,9 @@ function starsForScore(score) {
 /* ===== Derived totals ===== */
 function totalAnggotaAktif() { return state.anggota.filter(a => a.status === "aktif").length; }
 function kasTerkumpul() {
-  const dariTransaksi = state.transaksi.reduce((s, t) => s + (t.arah === "masuk" ? t.jumlah : -t.jumlah), 0);
+  const dariTransaksi = state.transaksi
+    .filter(t => !t.dibatalkan)
+    .reduce((s, t) => s + (t.arah === "masuk" ? t.jumlah : -t.jumlah), 0);
   return state.kasTerkumpulAwal + dariTransaksi;
 }
 function pinjamanBeredar() {
@@ -102,7 +104,7 @@ function jatuhTempoBulanIni() {
 function riwayatAngsuranAktif(a) {
   if (!a.pinjaman || a.pinjaman.cicilanTerbayar === 0) return [];
   const semua = state.transaksi
-    .filter(t => t.anggotaId === a.id && t.jenis === "angsuran")
+    .filter(t => t.anggotaId === a.id && t.jenis === "angsuran" && !t.dibatalkan)
     .sort((x, y) => new Date(x.tanggal) - new Date(y.tanggal));
   return semua.slice(-a.pinjaman.cicilanTerbayar);
 }
@@ -549,10 +551,10 @@ function renderHistori() {
     const a = getAnggota(t.anggotaId);
     const sign = t.arah === "masuk" ? "+" : "-";
     return `
-      <div class="activity-item">
+      <div class="activity-item" style="${t.dibatalkan ? "opacity:0.5" : ""}">
         <div class="activity-icon ${t.arah === "masuk" ? "in" : "out"}">${jenisIcon[t.jenis]}</div>
         <div class="activity-main">
-          <div class="activity-title">${jenisLabel[t.jenis]}${isAdmin() && a ? " — " + a.nama : ""}</div>
+          <div class="activity-title">${jenisLabel[t.jenis]}${isAdmin() && a ? " — " + a.nama : ""}${t.dibatalkan ? ' <span class="status-pill ditolak">Dibatalkan</span>' : ""}</div>
           <div class="activity-sub">${formatDate(t.tanggal)}${t.keterangan ? " · " + escapeHtml(t.keterangan) : ""}</div>
         </div>
         <div class="activity-amount ${t.arah === "masuk" ? "in" : "out"}">${sign}${formatRupiah(t.jumlah)}</div>
@@ -645,6 +647,9 @@ function openMemberDetail(id) {
       ${a.pinjaman
         ? `<button class="btn-outline" id="mdCatatAngsuranBtn">Catat Angsuran Manual</button>`
         : `<button class="btn-outline" id="mdInputPinjamanBtn">Input Pinjaman Manual</button>`}
+      ${a.pinjaman && a.pinjaman.cicilanTerbayar === 0
+        ? `<button class="btn-outline danger" id="mdHapusPinjamanBtn">Hapus Pinjaman Ini (Salah Input)</button>`
+        : ""}
       <button class="btn-outline" id="mdToggleStatusBtn">${a.status === "aktif" ? "Nonaktifkan" : "Aktifkan"} Anggota</button>
     </div>` : ""}
   `;
@@ -673,6 +678,20 @@ function openMemberDetail(id) {
         document.getElementById("adminAngsuranTanggal").value = todayIso();
         document.getElementById("adminAngsuranModalOverlay").hidden = false;
       });
+      if (a.pinjaman.cicilanTerbayar === 0) {
+        document.getElementById("mdHapusPinjamanBtn").addEventListener("click", async () => {
+          const actor = currentUser();
+          try {
+            await dbHapusPinjaman(a, actor ? actor.nama : "-");
+            await refreshState();
+            document.getElementById("memberModalOverlay").hidden = true;
+            renderMemberList(document.getElementById("memberSearch").value);
+            showToast("Pinjaman berhasil dihapus.");
+          } catch (err) {
+            showToast("Gagal: " + err.message);
+          }
+        });
+      }
     } else {
       document.getElementById("mdInputPinjamanBtn").addEventListener("click", () => {
         adminToolTargetAnggotaId = a.id;
@@ -915,7 +934,7 @@ function renderBukuKas(content) {
   content.innerHTML = `
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Tanggal</th><th>Keterangan</th><th>Masuk</th><th>Keluar</th></tr></thead>
+        <thead><tr><th>Tanggal</th><th>Keterangan</th><th>Masuk</th><th>Keluar</th>${isAdmin() ? "<th></th>" : ""}</tr></thead>
         <tbody>
           ${rows.map(t => {
             const a = getAnggota(t.anggotaId);
@@ -923,11 +942,13 @@ function renderBukuKas(content) {
               ? (t.keterangan || "Penyesuaian Kas")
               : `${jenisLabel[t.jenis]} — ${a ? a.nama : "-"}`;
             const cancelled = t.dibatalkan;
+            const bisaBatal = isAdmin() && !cancelled && t.jenis !== "pinjaman";
             return `<tr class="${cancelled ? "dibatalkan" : ""}" data-tx="${t.id}">
-              <td>${formatDate(t.tanggal)}</td>
+              <td>${formatDate(t.tanggal)}${cancelled ? ' <span class="status-pill ditolak">Dibatalkan</span>' : ""}</td>
               <td>${escapeHtml(ket)}</td>
               <td>${t.arah === "masuk" ? formatRupiah(t.jumlah) : "-"}</td>
               <td>${t.arah === "keluar" ? formatRupiah(t.jumlah) : "-"}</td>
+              ${isAdmin() ? `<td>${bisaBatal ? `<button class="btn-mini reject" data-batalkan-tx="${t.id}">Batalkan</button>` : ""}</td>` : ""}
             </tr>`;
           }).join("")}
         </tbody>
@@ -935,6 +956,23 @@ function renderBukuKas(content) {
     </div>
     <div class="form-note" style="margin-top:10px">Transaksi tidak pernah dihapus — hanya dapat dibatalkan (audit trail tetap tersimpan).</div>
   `;
+  if (isAdmin()) {
+    content.querySelectorAll("[data-batalkan-tx]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const t = state.transaksi.find(x => x.id === btn.dataset.batalkanTx);
+        if (!t) return;
+        const actor = currentUser();
+        try {
+          await dbBatalkanTransaksi(t, actor ? actor.nama : "-");
+          await refreshState();
+          renderBukuKas(content);
+          showToast("Transaksi dibatalkan.");
+        } catch (err) {
+          showToast("Gagal: " + err.message);
+        }
+      });
+    });
+  }
 }
 
 function renderNeraca(content) {

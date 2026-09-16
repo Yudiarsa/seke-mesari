@@ -528,6 +528,7 @@ button, input, select { font-family: inherit; }
   font-weight: 600;
   cursor: pointer;
 }
+.btn-outline.danger { border-color: var(--red); color: var(--red); }
 
 .table-wrap {
   overflow-x: auto;

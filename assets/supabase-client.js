@@ -300,3 +300,63 @@ async function dbAdminCatatAngsuran(anggota, tanggal, nominal, actorNama) {
 
   await dbLogAudit(actorNama, `Mencatat angsuran manual ${anggota.nama} sebesar ${formatRupiah(nominal)}`);
 }
+
+/* ===== Koreksi kesalahan input =====
+   Prinsip: transaksi kas/angsuran/setoran DIBATALKAN (tetap tercatat,
+   dikecualikan dari semua total) — bukan dihapus, supaya jejak audit
+   tidak bisa dimanipulasi. Pencairan pinjaman yang BELUM ada angsuran
+   sama sekali beda kasus: itu murni kesalahan input, jadi boleh benar-
+   benar dihapus. Begitu sudah ada 1x angsuran, tidak boleh dihapus lagi
+   — harus dibatalkan transaksinya satu per satu. */
+async function dbBatalkanTransaksi(transaksi, actorNama) {
+  if (transaksi.jenis === "pinjaman") {
+    throw new Error("Pencairan pinjaman tidak bisa dibatalkan dari sini — gunakan \"Hapus Pinjaman\" di detail anggota (hanya bisa kalau belum ada angsuran).");
+  }
+  const { error: txErr } = await db.from("transaksi").update({ dibatalkan: true }).eq("id", transaksi.id);
+  if (txErr) throw new Error(txErr.message);
+
+  if (transaksi.jenis === "angsuran" && transaksi.anggotaId) {
+    const { data: pinjamanRow } = await db.from("pinjaman")
+      .select("*").eq("anggota_id", transaksi.anggotaId)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (pinjamanRow) {
+      const cicilanBaru = Math.max(0, pinjamanRow.cicilan_terbayar - 1);
+      const { error } = await db.from("pinjaman")
+        .update({ cicilan_terbayar: cicilanBaru, status: "aktif" })
+        .eq("id", pinjamanRow.id);
+      if (error) throw new Error(error.message);
+      const { data: anggotaRow } = await db.from("anggota").select("tunggakan").eq("id", transaksi.anggotaId).single();
+      const { error: err2 } = await db.from("anggota")
+        .update({ tunggakan: (anggotaRow?.tunggakan || 0) + 1 })
+        .eq("id", transaksi.anggotaId);
+      if (err2) throw new Error(err2.message);
+    }
+  } else if (transaksi.jenis === "setoran" && transaksi.anggotaId) {
+    const { data: anggotaRow } = await db.from("anggota").select("total_simpanan").eq("id", transaksi.anggotaId).single();
+    const { error } = await db.from("anggota")
+      .update({ total_simpanan: Math.max(0, (anggotaRow?.total_simpanan || 0) - transaksi.jumlah) })
+      .eq("id", transaksi.anggotaId);
+    if (error) throw new Error(error.message);
+  }
+
+  await dbLogAudit(actorNama, `Membatalkan transaksi ${transaksi.jenis} sebesar ${formatRupiah(transaksi.jumlah)}`);
+}
+
+async function dbHapusPinjaman(anggota, actorNama) {
+  if (!anggota.pinjaman) throw new Error("Anggota ini tidak punya pinjaman aktif.");
+  if (anggota.pinjaman.cicilanTerbayar > 0) {
+    throw new Error("Pinjaman ini sudah punya riwayat angsuran, tidak bisa dihapus. Batalkan transaksinya satu per satu di Buku Kas kalau perlu.");
+  }
+  const { data: pencairanRows, error: selErr } = await db.from("transaksi")
+    .select("id").eq("anggota_id", anggota.id).eq("jenis", "pinjaman").eq("dibatalkan", false);
+  if (selErr) throw new Error(selErr.message);
+  if (pencairanRows && pencairanRows.length > 0) {
+    const { error: delTxErr } = await db.from("transaksi").delete().in("id", pencairanRows.map(r => r.id));
+    if (delTxErr) throw new Error(delTxErr.message);
+  }
+  const { error: pinjErr } = await db.from("pinjaman").delete().eq("id", anggota.pinjaman.id);
+  if (pinjErr) throw new Error(pinjErr.message);
+  const { error: anggotaErr } = await db.from("anggota").update({ tunggakan: 0 }).eq("id", anggota.id);
+  if (anggotaErr) throw new Error(anggotaErr.message);
+  await dbLogAudit(actorNama, `Menghapus pinjaman ${anggota.nama} yang salah input (belum ada angsuran)`);
+}
