@@ -31,6 +31,30 @@ nomor HP dipetakan ke email sintetis (`08xxxx@sekemesari.local`) supaya
 bisa memakai sistem Supabase Auth (hash password + session token) tanpa
 perlu SMS OTP berbayar.
 
+### Ganti Password & Lupa Password
+
+- **Ganti password** (masih ingat password lama, masih bisa login) — ada
+  di menu **Lainnya → Ganti Password**, bisa dilakukan sendiri oleh
+  anggota kapan saja.
+- **Lupa password** (tidak bisa login sama sekali) — **tidak ada
+  self-service**, karena akun memakai email sintetis (`.local`), bukan
+  email asli, sehingga fitur "kirim link reset ke email" bawaan Supabase
+  tidak bisa mengirim apa pun ke anggota. Admin harus mereset manual:
+  1. Buka [Supabase Dashboard](https://supabase.com/dashboard) → project
+     SEKE MESARI → **Authentication → Users**.
+  2. Cari baris dengan email `08xxxxxxxxxx@sekemesari.local` sesuai
+     nomor HP anggota yang lupa password.
+  3. Klik baris tersebut, lalu gunakan opsi reset/ubah password yang
+     disediakan Supabase di halaman detail user itu untuk mengatur
+     password baru.
+  4. Sampaikan password baru itu ke anggota lewat WhatsApp/lisan, lalu
+     minta mereka login dan segera ganti lagi lewat **Lainnya → Ganti
+     Password** supaya admin tidak tahu password final mereka.
+
+  Langkah 3 tergantung tampilan Supabase Dashboard yang bisa berubah
+  sewaktu-waktu — kalau opsinya tidak terlihat, cek dokumentasi Supabase
+  terbaru atau tanya di komunitasnya.
+
 ## Struktur Menu (5 Tab)
 
 - **Home** — sapaan + periode arisan berjalan (ke-N dari 10), ringkasan

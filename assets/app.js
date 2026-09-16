@@ -711,6 +711,7 @@ const LAINNYA_ITEMS = [
   { key: "timeline", icon: "🗓️", label: "Timeline Periode", adminOnly: false },
   { key: "auditlog", icon: "🧾", label: "Audit Log", adminOnly: false },
   { key: "unduhLaporan", icon: "⬇️", label: "Unduh Laporan Keuangan (PDF)", adminOnly: false },
+  { key: "gantiPassword", icon: "🔑", label: "Ganti Password", adminOnly: false },
   { key: "sesuaikanKas", icon: "🧮", label: "Sesuaikan Kas", adminOnly: true },
   { key: "peran", icon: "🔁", label: "Lihat Sebagai (Demo)", adminOnly: false },
   { key: "tentang", icon: "ℹ️", label: "Tentang & Keterbatasan", adminOnly: false },
@@ -749,6 +750,7 @@ function renderLainnya() {
     if (lainnyaView === "timeline") renderTimeline(content);
     if (lainnyaView === "auditlog") renderAuditLog(content);
     if (lainnyaView === "peran") renderPeranSwitch(content);
+    if (lainnyaView === "gantiPassword") renderGantiPassword(content);
     if (lainnyaView === "tentang") renderTentang(content);
   }
 }
@@ -1108,6 +1110,32 @@ function renderTentang(content) {
       Aplikasi ini butuh koneksi internet untuk berfungsi (berbeda dari versi awal yang bisa dipakai offline).
     </div>
   `;
+}
+
+function renderGantiPassword(content) {
+  content.innerHTML = `
+    <form id="gantiPasswordForm">
+      <label>Password Baru</label>
+      <input type="password" id="gantiPasswordBaru" placeholder="Minimal 6 karakter" minlength="6" required>
+      <label>Ulangi Password Baru</label>
+      <input type="password" id="gantiPasswordKonfirmasi" placeholder="Ketik ulang password baru" minlength="6" required>
+      <div class="form-note">Lupa password lama dan tidak bisa login sama sekali? Ini bukan halamannya — hubungi admin untuk direset manual.</div>
+      <button type="submit" class="btn-primary">Simpan Password Baru</button>
+    </form>
+  `;
+  document.getElementById("gantiPasswordForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const baru = document.getElementById("gantiPasswordBaru").value;
+    const konfirmasi = document.getElementById("gantiPasswordKonfirmasi").value;
+    if (baru !== konfirmasi) { showToast("Password baru dan konfirmasi tidak sama."); return; }
+    try {
+      await dbGantiPassword(baru);
+      document.getElementById("gantiPasswordForm").reset();
+      showToast("Password berhasil diubah.");
+    } catch (err) {
+      showToast("Gagal: " + err.message);
+    }
+  });
 }
 
 /* ===== Modals: Ajukan Pinjaman ===== */

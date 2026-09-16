@@ -65,6 +65,17 @@ async function dbGetSessionUserId() {
   return data.session ? data.session.user.id : null;
 }
 
+/* Ganti password untuk anggota yang masih bisa login (ingat password lama).
+   Untuk anggota yang benar-benar lupa password (tidak bisa login sama
+   sekali), tidak ada jalur self-service: akun memakai email sintetis
+   (nomor HP + "@sekemesari.local"), bukan email asli, jadi Supabase tidak
+   punya alamat nyata untuk kirim link reset. Admin harus reset manual
+   lewat Supabase Dashboard — lihat README bagian Keamanan. */
+async function dbGantiPassword(passwordBaru) {
+  const { error } = await db.auth.updateUser({ password: passwordBaru });
+  if (error) throw new Error(error.message);
+}
+
 /* ===== Fetch seluruh state =====
    Mengembalikan objek dengan bentuk yang SAMA PERSIS dengan `state` versi
    localStorage sebelumnya, supaya semua fungsi render di app.js tidak
