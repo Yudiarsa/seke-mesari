@@ -222,3 +222,19 @@ create policy "pengaturan_write_admin" on public.pengaturan for all to authentic
 -- TIDAK ADA policy update/delete sama sekali -> log tidak bisa diubah/dihapus.
 drop policy if exists "auditlog_insert_all" on public.audit_log;
 create policy "auditlog_insert_all" on public.audit_log for insert to authenticated with check (true);
+
+-- ============================================================================
+-- STORAGE (bucket "bukti-pembayaran")
+-- "Public bucket" di dashboard hanya mengizinkan orang MEMBACA file lewat
+-- URL publik — mengunggah (insert) tetap butuh policy RLS sendiri di sini.
+-- Bucket-nya sendiri harus dibuat manual sekali lewat dashboard (Storage ->
+-- New bucket -> nama "bukti-pembayaran" -> Public bucket: ON), SQL tidak
+-- bisa membuat bucket.
+-- ============================================================================
+drop policy if exists "bukti_pembayaran_upload_own_folder" on storage.objects;
+create policy "bukti_pembayaran_upload_own_folder"
+  on storage.objects for insert to authenticated
+  with check (
+    bucket_id = 'bukti-pembayaran'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
