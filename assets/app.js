@@ -593,6 +593,13 @@ function openMemberDetail(id) {
   const score = skorKepatuhan(a);
   document.getElementById("memberModalTitle").textContent = a.nama;
 
+  /* Riwayat transaksi per-tanggal-dan-nominal adalah data pribadi finansial
+     anggota tsb — cuma admin (untuk rekonsiliasi pembukuan) dan pemilik
+     akun sendiri yang berhak lihat detailnya. Anggota lain cukup lihat
+     ringkasan (status pinjaman, skor kepatuhan) yang sudah tampil di atas. */
+  const u = currentUser();
+  const bolehLihatRiwayat = isAdmin() || (u && u.id === a.id);
+
   const riwayat = state.transaksi.filter(t => t.anggotaId === a.id).sort((x, y) => new Date(y.tanggal) - new Date(x.tanggal));
   const jenisLabel = { setoran: "Setoran", pinjaman: "Pinjaman", angsuran: "Angsuran" };
   const jenisIcon = { setoran: "➕", pinjaman: "💰", angsuran: "📄" };
@@ -625,7 +632,9 @@ function openMemberDetail(id) {
     ${a.pinjaman ? `
     <div class="md-section-title">Riwayat Pembayaran (${a.pinjaman.cicilanTerbayar} dari ${a.pinjaman.totalCicilan} kali) · Jatuh tempo ${formatDate(a.pinjaman.jatuhTempo)}</div>
     <div class="activity-list">${
-      riwayatAngsuranAktif(a).length === 0
+      !bolehLihatRiwayat
+        ? `<div class="activity-empty">🔒 Detail riwayat pembayaran hanya bisa dilihat admin dan pemilik akun ini.</div>`
+        : riwayatAngsuranAktif(a).length === 0
         ? `<div class="activity-empty">Belum ada pembayaran untuk pinjaman ini.</div>`
         : riwayatAngsuranAktif(a).map((t, i) => `
           <div class="activity-item">
@@ -639,8 +648,10 @@ function openMemberDetail(id) {
     }</div>
     ` : ""}
 
+    ${bolehLihatRiwayat ? `
     <div class="md-section-title">Riwayat Transaksi (Semua)</div>
     <div class="activity-list">${riwayatHtml}</div>
+    ` : ""}
 
     ${isAdmin() ? `
     <div class="md-actions">
